@@ -7,9 +7,115 @@
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
   </head>
   <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
+    <h1>K-Factor Viral Coefficient: how viral is your product?</h1>
+    <br><br>
+    <img src="http://upload.wikimedia.org/math/2/0/2/20215a64b5e9d1a70e1f23d182efc120.png"/><br>
+		<img src="http://upload.wikimedia.org/math/d/b/a/dba3b55cb7520ba711e9ad384ae7aff7.png"/><br>
+		<img src="http://upload.wikimedia.org/math/4/1/0/41083d2dae849c2c95c2440ffa7f375e.png"/><br>
+    <br>
+    <div id="datePicker"></div>
+    <br><br>
+    <div id="dataLineChart"></div>
+		<br><br>
+    <div id="dataTable"></div>
+    
     <script>
       // Run queries and display results here
+      $(document).ready(function() {
+			
+			var dateSelector = $('#datePicker').MPDatepicker();
+			
+			var today = new Date()
+			var default_fromDate = new Date()
+
+			default_fromDate.setMonth(today.getMonth() - 4);
+        	dateSelector.val({from: default_fromDate, to: today});
+
+			var fromDate = default_fromDate //dateSelector.val().from
+			var toDate = today //dateSelector.val().to
+			
+			var mpTable = $('#dataTable').MPTable({firstColHeader: "Month"});
+			var mpChart = $('#dataLineChart').MPChart({chartType: 'line'})
+
+      var sort_object = function(map) {
+			    var keys = _.sortBy(_.keys(map), function(a) { return a; });
+			    var newmap = {};
+			    _.each(keys, function(k) {
+			        newmap[k] = map[k];
+			    });
+			    return newmap;
+			}
+
+			function createGraph() {
+				var promises = []
+				var tableData = {}
+				var lineChartData = {"K-Factor": {}}
+
+				var totalPromise = new Promise(function(resolve, reject) {
+				// 	MP.api.segment('Invite Sent', 'Number of Invites', {type: 'general', unit: 'month', from: fromDate, to: toDate, method: 'sum'}).done(function(results) {
+					MP.api.segment('$custom_event:53263', 'amount', {type: 'general', unit: 'month', from: fromDate, to: toDate, method: 'sum'}).done(function(results) {
+					  resolve(results)})})
+
+				var acceptedPromise = new Promise(function(resolve, reject) {
+					MP.api.segment('$custom_event:53265', undefined, {type: 'general', unit: 'month', from: fromDate, to: toDate}).done(function(results) {
+						resolve(results)})})
+
+				var sentUniquePromise = new Promise(function(resolve, reject) {
+					MP.api.segment('$custom_event:53263', undefined, {type: 'unique', unit: 'month', from: fromDate, to: toDate}).done(function(results) {
+						resolve(results)})})
+
+				promises.push(totalPromise)
+				promises.push(acceptedPromise)
+				promises.push(sentUniquePromise)
+				console.log(promises)
+
+				Promise.all(promises).then(function(data) {
+
+					var dates = Object.keys(data[0].values())
+					console.log(dates)
+
+
+					totalSent = data[0].values()
+					totalAccepted = data[1].values()
+					uniqueSent = data[2].values()
+
+					
+					for (var i in dates) {
+						//Get Totals
+						var avgSent = (totalSent[dates[i]] / uniqueSent["$custom_event:53263"][dates[i]])
+						console.log(avgSent)
+
+						var totalAccepted_Calc = totalAccepted["$custom_event:53265"][dates[i]]
+						var totalSent_Calc = totalSent[dates[i]]
+						//Percent Conversion
+						var conversion = (totalAccepted_Calc / totalSent_Calc)
+
+						var kScore = avgSent * conversion
+						// console.log(kScore)
+
+            if (isNaN(kScore)) {
+							kScore = 0
+						}
+						lineChartData["K-Factor"][dates[i]] = kScore
+
+						tableData[dates[i]] = {"Invites Per Customer": avgSent.toFixed(2), "Total Sent": Math.round(totalSent_Calc), "Total Accepted": totalAccepted_Calc, "~K-Factor Score": kScore.toFixed(4)}
+
+						mpTable.MPTable('setData', sort_object(tableData));
+						mpChart.MPChart('setData', lineChartData);
+					}
+				});
+			}
+
+		createGraph();
+
+		dateSelector.on('change', function(e, dates) {
+      		toDate = dateSelector.MPDatepicker('value').to
+      		fromDate = dateSelector.MPDatepicker('value').from
+      		createGraph()});
+
+			})
+      
     </script>
   </body>
 </html>
+
